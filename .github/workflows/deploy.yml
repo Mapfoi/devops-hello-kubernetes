@@ -102,18 +102,18 @@ jobs:
       
           echo "=== Python check ==="
           python3 - <<'PY'
-      import json
-      import os
-      
-      path = os.environ["YC_SERVICE_ACCOUNT_KEY_FILE"]
-      
-      with open(path) as f:
-          data = json.load(f)
-      
-      print("id:", data["id"])
-      print("service_account_id:", data["service_account_id"])
-      print("private_key prefix:", repr(data["private_key"][:60]))
-      PY
+            import json
+            import os
+            
+            path = os.environ["YC_SERVICE_ACCOUNT_KEY_FILE"]
+            
+            with open(path) as f:
+                data = json.load(f)
+            
+            print("id:", data["id"])
+            print("service_account_id:", data["service_account_id"])
+            print("private_key prefix:", repr(data["private_key"][:60]))
+          PY
       - name: Terraform Init
         working-directory: terraform
         env:
