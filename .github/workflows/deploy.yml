@@ -89,7 +89,31 @@ jobs:
           printenv YC_SERVICE_ACCOUNT_JSON > "$RUNNER_TEMP/key.json"
           chmod 600 "$RUNNER_TEMP/key.json"
           echo "YC_SERVICE_ACCOUNT_KEY_FILE=$RUNNER_TEMP/key.json" >> "$GITHUB_ENV"
-
+      - name: Debug service account key
+        run: |
+          echo "=== File ==="
+          ls -l "$YC_SERVICE_ACCOUNT_KEY_FILE"
+      
+          echo "=== JSON ==="
+          jq . "$YC_SERVICE_ACCOUNT_KEY_FILE" >/dev/null && echo "JSON OK"
+      
+          echo "=== Metadata ==="
+          jq 'del(.private_key, .public_key)' "$YC_SERVICE_ACCOUNT_KEY_FILE"
+      
+          echo "=== Python check ==="
+          python3 - <<'PY'
+      import json
+      import os
+      
+      path = os.environ["YC_SERVICE_ACCOUNT_KEY_FILE"]
+      
+      with open(path) as f:
+          data = json.load(f)
+      
+      print("id:", data["id"])
+      print("service_account_id:", data["service_account_id"])
+      print("private_key prefix:", repr(data["private_key"][:60]))
+      PY
       - name: Terraform Init
         working-directory: terraform
         env:
