@@ -1,8 +1,3 @@
-variable "yc_service_account_key_file" {
-  description = "Path to Yandex Cloud service account JSON key file"
-  type        = string
-}
-
 variable "yc_cloud_id" {
   description = "Yandex Cloud ID"
   type        = string
