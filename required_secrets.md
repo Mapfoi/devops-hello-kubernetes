@@ -33,6 +33,18 @@
 
 > Вставьте **весь JSON-файл** целиком как значение секрета.
 
+**Важно:** не редактируйте и не «красиво форматируйте» JSON вручную в UI.
+Если Terraform падает с `key unmarshal fail: invalid character '\n'`,
+пересоздайте секрет одной строкой:
+
+```bash
+jq -c . key.json
+# скопируйте ВЫВОД целиком в GitHub Secret YC_SERVICE_ACCOUNT_JSON
+```
+
+Pipeline сам нормализует ключ через `scripts/write-yc-sa-key.py`
+(чинит литеральные переносы строк внутри `private_key`).
+
 Необходимые роли сервисного аккаунта (минимум):
 
 - `editor` (или набор: `k8s.admin`, `compute.admin`, `vpc.admin`, `mdb.admin`, `iam.serviceAccounts.user`)

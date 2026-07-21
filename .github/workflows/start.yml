@@ -9,15 +9,20 @@ jobs:
     timeout-minutes: 20
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Install Yandex Cloud CLI
         run: |
           curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash
           echo "$HOME/yandex-cloud/bin" >> "$GITHUB_PATH"
 
       - name: Authenticate Yandex Cloud CLI
+        env:
+          YC_SA_JSON: ${{ secrets.YC_SERVICE_ACCOUNT_JSON }}
+          YC_SA_KEY_PATH: /tmp/key.json
         run: |
-          echo '${{ secrets.YC_SERVICE_ACCOUNT_JSON }}' > /tmp/key.json
-          chmod 600 /tmp/key.json
+          python3 scripts/write-yc-sa-key.py
           yc config profile create github-actions || true
           yc config set service-account-key /tmp/key.json
           yc config set cloud-id "${{ secrets.YC_CLOUD_ID }}"

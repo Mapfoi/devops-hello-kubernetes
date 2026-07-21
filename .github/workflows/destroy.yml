@@ -22,9 +22,10 @@ jobs:
           terraform_wrapper: false
 
       - name: Create YC service account key
-        run: |
-          echo '${{ secrets.YC_SERVICE_ACCOUNT_JSON }}' > /tmp/key.json
-          chmod 600 /tmp/key.json
+        env:
+          YC_SA_JSON: ${{ secrets.YC_SERVICE_ACCOUNT_JSON }}
+          YC_SA_KEY_PATH: /tmp/key.json
+        run: python3 scripts/write-yc-sa-key.py
 
       - name: Install Yandex Cloud CLI
         run: |
