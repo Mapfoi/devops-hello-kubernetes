@@ -1,0 +1,21 @@
+# ServiceMonitor for Prometheus Operator — scrapes Flask /metrics
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: app
+  namespace: devops-app
+  labels:
+    app: devops-hello
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: devops-hello
+  namespaceSelector:
+    matchNames:
+      - devops-app
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s

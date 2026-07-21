@@ -1,0 +1,41 @@
+name: Stop Environment
+
+on:
+  workflow_dispatch:
+
+jobs:
+  stop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Install Yandex Cloud CLI
+        run: |
+          curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash
+          echo "$HOME/yandex-cloud/bin" >> "$GITHUB_PATH"
+
+      - name: Authenticate Yandex Cloud CLI
+        run: |
+          echo '${{ secrets.YC_SERVICE_ACCOUNT_JSON }}' > /tmp/key.json
+          chmod 600 /tmp/key.json
+          yc config profile create github-actions || true
+          yc config set service-account-key /tmp/key.json
+          yc config set cloud-id "${{ secrets.YC_CLOUD_ID }}"
+          yc config set folder-id "${{ secrets.YC_FOLDER_ID }}"
+
+      - name: Stop Managed Kubernetes cluster
+        run: |
+          CLUSTER_ID=$(yc managed-kubernetes cluster get devops-k8s-cluster --format json | jq -r '.id')
+          echo "Stopping cluster $CLUSTER_ID"
+          yc managed-kubernetes cluster stop "$CLUSTER_ID"
+
+      - name: Stop Managed PostgreSQL cluster
+        run: |
+          DB_ID=$(yc managed-postgresql cluster get devops-db-cluster --format json | jq -r '.id')
+          echo "Stopping PostgreSQL $DB_ID"
+          yc managed-postgresql cluster stop "$DB_ID" || true
+
+      - name: Verify cluster stopped
+        run: |
+          STATUS=$(yc managed-kubernetes cluster get devops-k8s-cluster --format json | jq -r '.status')
+          echo "Cluster status: $STATUS"

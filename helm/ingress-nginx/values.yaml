@@ -1,0 +1,22 @@
+controller:
+  replicaCount: 1
+  service:
+    type: LoadBalancer
+  metrics:
+    enabled: true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+  allowSnippetAnnotations: false
+
+  config:
+    use-forwarded-headers: "true"
+    compute-full-forwarded-for: "true"
+
+defaultBackend:
+  enabled: true

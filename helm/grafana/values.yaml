@@ -1,0 +1,101 @@
+# Grafana Helm chart values
+adminPassword: admin
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  hosts:
+    - paths:
+        - path: /grafana
+          pathType: Prefix
+
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        url: http://prometheus-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090
+        access: proxy
+        isDefault: true
+        editable: false
+
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: default
+        orgId: 1
+        folder: ""
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/default
+
+dashboards:
+  default:
+    devops-hello:
+      json: |
+        {
+          "title": "DevOps Hello World Dashboard",
+          "uid": "devops-hello",
+          "version": 1,
+          "panels": [
+            {
+              "id": 1,
+              "title": "Visits per Second",
+              "type": "timeseries",
+              "targets": [
+                {
+                  "expr": "rate(flask_http_request_total{method=\"GET\"}[1m])",
+                  "legendFormat": "Requests / sec"
+                }
+              ],
+              "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+            },
+            {
+              "id": 2,
+              "title": "Request Duration P95",
+              "type": "timeseries",
+              "targets": [
+                {
+                  "expr": "histogram_quantile(0.95, rate(flask_http_request_duration_seconds_bucket{path=\"/\"}[5m]))",
+                  "legendFormat": "P95 Latency"
+                }
+              ],
+              "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+            },
+            {
+              "id": 3,
+              "title": "HTTP Status Codes",
+              "type": "stat",
+              "targets": [
+                {
+                  "expr": "sum(flask_http_request_total) by (status)",
+                  "legendFormat": "{{status}}"
+                }
+              ],
+              "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8}
+            }
+          ],
+          "schemaVersion": 39,
+          "timezone": "browser"
+        }
+
+grafana.ini:
+  server:
+    root_url: "%(protocol)s://%(domain)s/grafana/"
+    serve_from_sub_path: true
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi

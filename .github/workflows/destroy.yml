@@ -1,0 +1,79 @@
+name: Destroy Infrastructure
+
+on:
+  workflow_dispatch:
+
+env:
+  TF_VERSION: "1.5.0"
+
+jobs:
+  destroy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Create YC service account key
+        run: |
+          echo '${{ secrets.YC_SERVICE_ACCOUNT_JSON }}' > /tmp/key.json
+          chmod 600 /tmp/key.json
+
+      - name: Install Yandex Cloud CLI
+        run: |
+          curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash
+          echo "$HOME/yandex-cloud/bin" >> "$GITHUB_PATH"
+
+      - name: Authenticate YC CLI
+        run: |
+          yc config profile create github-actions || true
+          yc config set service-account-key /tmp/key.json
+          yc config set cloud-id "${{ secrets.YC_CLOUD_ID }}"
+          yc config set folder-id "${{ secrets.YC_FOLDER_ID }}"
+
+      - name: Install kubectl and Helm
+        uses: azure/setup-kubectl@v4
+
+      - name: Cleanup Kubernetes LoadBalancers (best effort)
+        continue-on-error: true
+        run: |
+          CLUSTER_ID=$(yc managed-kubernetes cluster list --format json 2>/dev/null \
+            | jq -r '.[] | select(.name=="devops-k8s-cluster") | .id' || true)
+
+          if [ -n "$CLUSTER_ID" ] && [ "$CLUSTER_ID" != "null" ]; then
+            yc managed-kubernetes cluster get-credentials "$CLUSTER_ID" --external --force || true
+            helm uninstall grafana -n monitoring || true
+            helm uninstall prometheus -n monitoring || true
+            helm uninstall ingress-nginx -n ingress-nginx || true
+            kubectl delete namespace devops-app --wait=false || true
+            kubectl delete namespace monitoring --wait=false || true
+            kubectl delete namespace ingress-nginx --wait=false || true
+            sleep 30
+          fi
+
+      - name: Terraform Init
+        working-directory: terraform
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.YC_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.YC_SECRET_KEY }}
+        run: terraform init -reconfigure
+
+      - name: Terraform Destroy
+        working-directory: terraform
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.YC_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.YC_SECRET_KEY }}
+        run: |
+          terraform destroy \
+            -auto-approve \
+            -var="yc_service_account_key_file=/tmp/key.json" \
+            -var="yc_cloud_id=${{ secrets.YC_CLOUD_ID }}" \
+            -var="yc_folder_id=${{ secrets.YC_FOLDER_ID }}" \
+            -var="db_password=${{ secrets.DB_PASSWORD }}"

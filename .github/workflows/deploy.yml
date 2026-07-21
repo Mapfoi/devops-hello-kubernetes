@@ -1,0 +1,270 @@
+name: Deploy to Kubernetes
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: k8s-deploy
+  cancel-in-progress: false
+
+env:
+  TF_VERSION: "1.5.0"
+  HELM_VERSION: "v3.14.0"
+  APP_NAMESPACE: devops-app
+  MONITORING_NAMESPACE: monitoring
+
+jobs:
+
+################################################################################
+# BUILD & PUSH DOCKER IMAGE
+################################################################################
+
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+      image_tag: ${{ steps.image.outputs.tag }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Build Docker image
+        id: image
+        run: |
+          TAG="${{ github.sha }}"
+          IMAGE="${{ secrets.DOCKER_USERNAME }}/devops-hello:${TAG}"
+
+          docker build -t "$IMAGE" ./app
+          docker tag "$IMAGE" "${{ secrets.DOCKER_USERNAME }}/devops-hello:latest"
+
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Push Docker image
+        run: |
+          docker push "${{ steps.image.outputs.image }}"
+          docker push "${{ secrets.DOCKER_USERNAME }}/devops-hello:latest"
+
+################################################################################
+# TERRAFORM — Managed Kubernetes + PostgreSQL
+################################################################################
+
+  infrastructure:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      cluster_id: ${{ steps.outputs.outputs.cluster_id }}
+      db_host: ${{ steps.outputs.outputs.db_host }}
+      db_port: ${{ steps.outputs.outputs.db_port }}
+      db_name: ${{ steps.outputs.outputs.db_name }}
+      db_user: ${{ steps.outputs.outputs.db_user }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Create Service Account Key
+        run: |
+          echo '${{ secrets.YC_SERVICE_ACCOUNT_JSON }}' > /tmp/key.json
+          chmod 600 /tmp/key.json
+
+      - name: Terraform Init
+        working-directory: terraform
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.YC_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.YC_SECRET_KEY }}
+        run: terraform init -reconfigure
+
+      - name: Terraform Apply
+        working-directory: terraform
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.YC_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.YC_SECRET_KEY }}
+        run: |
+          terraform apply \
+            -auto-approve \
+            -var="yc_service_account_key_file=/tmp/key.json" \
+            -var="yc_cloud_id=${{ secrets.YC_CLOUD_ID }}" \
+            -var="yc_folder_id=${{ secrets.YC_FOLDER_ID }}" \
+            -var="db_password=${{ secrets.DB_PASSWORD }}"
+
+      - name: Get Terraform Outputs
+        id: outputs
+        working-directory: terraform
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.YC_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.YC_SECRET_KEY }}
+        run: |
+          echo "cluster_id=$(terraform output -raw cluster_id)" >> "$GITHUB_OUTPUT"
+          echo "db_host=$(terraform output -raw db_host)" >> "$GITHUB_OUTPUT"
+          echo "db_port=$(terraform output -raw db_port)" >> "$GITHUB_OUTPUT"
+          echo "db_name=$(terraform output -raw db_name)" >> "$GITHUB_OUTPUT"
+          echo "db_user=$(terraform output -raw db_user)" >> "$GITHUB_OUTPUT"
+
+################################################################################
+# DEPLOY TO KUBERNETES
+################################################################################
+
+  deploy:
+    needs:
+      - build
+      - infrastructure
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Yandex Cloud CLI
+        run: |
+          curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash
+          echo "$HOME/yandex-cloud/bin" >> "$GITHUB_PATH"
+
+      - name: Authenticate YC CLI
+        run: |
+          echo '${{ secrets.YC_SERVICE_ACCOUNT_JSON }}' > /tmp/key.json
+          chmod 600 /tmp/key.json
+          yc config profile create github-actions || true
+          yc config set service-account-key /tmp/key.json
+          yc config set cloud-id "${{ secrets.YC_CLOUD_ID }}"
+          yc config set folder-id "${{ secrets.YC_FOLDER_ID }}"
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - name: Get kubeconfig
+        run: |
+          # Prefer dynamic credentials from the cluster created by Terraform.
+          # Optional secret YC_KUBECONFIG can override if set.
+          if [ -n "${{ secrets.YC_KUBECONFIG }}" ] && [ "${{ secrets.YC_KUBECONFIG }}" != "" ]; then
+            mkdir -p "$HOME/.kube"
+            printf '%s\n' "${{ secrets.YC_KUBECONFIG }}" > "$HOME/.kube/config"
+            chmod 600 "$HOME/.kube/config"
+          else
+            yc managed-kubernetes cluster get-credentials \
+              "${{ needs.infrastructure.outputs.cluster_id }}" \
+              --external \
+              --force
+          fi
+
+          kubectl cluster-info
+          kubectl get nodes
+
+      - name: Install Ingress NGINX (LoadBalancer)
+        run: |
+          helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+          helm repo update
+          helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
+            --namespace ingress-nginx \
+            --create-namespace \
+            --values helm/ingress-nginx/values.yaml \
+            --wait \
+            --timeout 10m
+
+      - name: Create namespace and ConfigMap
+        run: |
+          kubectl apply -f kubernetes/namespace.yaml
+          kubectl apply -f kubernetes/configmap.yaml
+
+      - name: Create database Secret from Terraform outputs
+        run: |
+          kubectl -n "${{ env.APP_NAMESPACE }}" create secret generic app-db-secret \
+            --from-literal=DB_HOST="${{ needs.infrastructure.outputs.db_host }}" \
+            --from-literal=DB_PORT="${{ needs.infrastructure.outputs.db_port }}" \
+            --from-literal=DB_NAME="${{ needs.infrastructure.outputs.db_name }}" \
+            --from-literal=DB_USER="${{ needs.infrastructure.outputs.db_user }}" \
+            --from-literal=DB_PASSWORD="${{ secrets.DB_PASSWORD }}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Render and apply Deployment
+        run: |
+          export DOCKER_USERNAME="${{ secrets.DOCKER_USERNAME }}"
+          export IMAGE_TAG="${{ needs.build.outputs.image_tag }}"
+
+          sed \
+            -e "s|DOCKER_USERNAME/devops-hello:latest|${DOCKER_USERNAME}/devops-hello:${IMAGE_TAG}|g" \
+            kubernetes/deployment.yaml | kubectl apply -f -
+
+          kubectl apply -f kubernetes/service.yaml
+          kubectl apply -f kubernetes/ingress.yaml
+          kubectl apply -f kubernetes/hpa.yaml
+
+      - name: Wait for rolling update
+        run: |
+          kubectl -n "${{ env.APP_NAMESPACE }}" rollout status deployment/app --timeout=300s
+          kubectl -n "${{ env.APP_NAMESPACE }}" get pods
+          kubectl -n "${{ env.APP_NAMESPACE }}" get svc,ingress,hpa
+
+      - name: Install Prometheus Operator (kube-prometheus-stack)
+        run: |
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo update
+
+          kubectl apply -f kubernetes/monitoring/namespace.yaml
+
+          helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+            --namespace "${{ env.MONITORING_NAMESPACE }}" \
+            --values helm/prometheus/values.yaml \
+            --wait \
+            --timeout 10m
+
+          # Wait for CRDs then apply ServiceMonitor
+          kubectl apply -f kubernetes/monitoring/servicemonitor.yaml
+
+      - name: Install Grafana
+        run: |
+          helm repo add grafana https://grafana.github.io/helm-charts
+          helm repo update
+
+          helm upgrade --install grafana grafana/grafana \
+            --namespace "${{ env.MONITORING_NAMESPACE }}" \
+            --values helm/grafana/values.yaml \
+            --wait \
+            --timeout 5m
+
+      - name: Deployment summary
+        run: |
+          INGRESS_IP=$(kubectl -n ingress-nginx get svc ingress-nginx-controller \
+            -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
+
+          echo "======================================"
+          echo "DEPLOYMENT COMPLETED"
+          echo "======================================"
+          echo ""
+          echo "Image: ${{ needs.build.outputs.image }}"
+          echo "Cluster: ${{ needs.infrastructure.outputs.cluster_id }}"
+          echo "DB Host: ${{ needs.infrastructure.outputs.db_host }}"
+          echo ""
+          if [ -n "$INGRESS_IP" ]; then
+            echo "Application:  http://${INGRESS_IP}/"
+            echo "Grafana:      http://${INGRESS_IP}/grafana  (admin / admin)"
+          else
+            echo "Ingress IP is provisioning. Check later:"
+            echo "  kubectl -n ingress-nginx get svc ingress-nginx-controller"
+          fi
+          echo ""
+          echo "Pods:"
+          kubectl -n "${{ env.APP_NAMESPACE }}" get pods -o wide
+          echo "======================================"
