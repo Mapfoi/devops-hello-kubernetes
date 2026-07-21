@@ -126,14 +126,10 @@ resource "yandex_kubernetes_cluster" "app" {
     }
   }
 
-  service_account_id      = yandex_iam_service_account.k8s_cluster.id
-  node_service_account_id = yandex_iam_service_account.k8s_nodes.id
+  service_account_id      = data.yandex_iam_service_account.k8s.id
+  node_service_account_id = data.yandex_iam_service_account.k8s.id
 
   release_channel = "REGULAR"
 
   network_policy_provider = "CALICO"
-
-  depends_on = [
-    time_sleep.wait_for_iam,
-  ]
 }

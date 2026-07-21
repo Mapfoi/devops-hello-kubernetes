@@ -67,6 +67,7 @@ GitHub Actions
 | Компонент | Назначение |
 |-----------|------------|
 | **Managed Kubernetes** | Оркестрация контейнеров, self-healing, rolling updates |
+| **hello-k8s-sa** | Существующий SA (IAM вручную); Terraform только читает его через data source |
 | **Node Group** | Worker nodes с autoscaling `min=2`, `max=5` |
 | **Deployment** | Желаемое состояние приложения (≥ 2 replicas) |
 | **Pod** | Экземпляр контейнера Flask + gunicorn |
@@ -161,7 +162,7 @@ PostgreSQL **не** переносится в Kubernetes — остаётся Ma
 │   ├── variables.tf
 │   ├── outputs.tf
 │   ├── backend.tf
-│   ├── iam.tf
+│   ├── sa.tf              # data source: existing hello-k8s-sa (IAM вручную)
 │   ├── cluster.tf
 │   ├── node_group.tf
 │   └── database.tf

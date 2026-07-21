@@ -64,8 +64,38 @@ yc iam key create \
 
 ```bash
 jq empty key.json && echo OK
-# или
-python -m json.tool key.json > /dev/null && echo OK
+```
+
+#### Сервисный аккаунт `hello-k8s-sa` (вручную, не через Terraform)
+
+Terraform **не** создаёт IAM и **не** назначает роли.  
+Используется уже существующий SA (по умолчанию `hello-k8s-sa`).
+
+Роли на каталог (выдать один раз в консоли / CLI):
+
+| Роль | Зачем |
+|------|--------|
+| `editor` (или шире) | Terraform create/update ресурсов |
+| `k8s.clusters.agent` | Managed Kubernetes master |
+| `vpc.publicAdmin` | Публичные IP / сеть кластера |
+| `load-balancer.admin` | NLB для Ingress |
+| `alb.editor` | ALB (если понадобится) |
+| `certificate-manager.certificates.downloader` | Сертификаты |
+| `container-registry.images.puller` | Pull образов на nodes |
+| `viewer` | Node group SA обязанности |
+| `storage.editor` | Terraform S3 state (если тот же SA) |
+
+```bash
+FOLDER_ID=$(yc config get folder-id)
+SA_ID=$(yc iam service-account get hello-k8s-sa --format json | jq -r .id)
+
+for ROLE in editor k8s.clusters.agent vpc.publicAdmin load-balancer.admin \
+            alb.editor certificate-manager.certificates.downloader \
+            container-registry.images.puller viewer storage.editor; do
+  yc resource-manager folder add-access-binding "$FOLDER_ID" \
+    --role "$ROLE" \
+    --subject "serviceAccount:$SA_ID"
+done
 ```
 
 ---

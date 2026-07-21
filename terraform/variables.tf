@@ -14,6 +14,12 @@ variable "yc_zone" {
   default     = "ru-central1-a"
 }
 
+variable "k8s_service_account_name" {
+  description = "Existing IAM service account used by Managed Kubernetes (cluster + nodes). Roles are assigned manually."
+  type        = string
+  default     = "hello-k8s-sa"
+}
+
 variable "db_password" {
   description = "Managed PostgreSQL password"
   type        = string

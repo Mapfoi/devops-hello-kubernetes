@@ -6,9 +6,5 @@ terraform {
       source  = "yandex-cloud/yandex"
       version = "~> 0.85"
     }
-    time = {
-      source  = "hashicorp/time"
-      version = "~> 0.11"
-    }
   }
 }

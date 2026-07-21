@@ -89,13 +89,82 @@ jobs:
           printenv YC_SERVICE_ACCOUNT_JSON > "$RUNNER_TEMP/key.json"
           chmod 600 "$RUNNER_TEMP/key.json"
           echo "YC_SERVICE_ACCOUNT_KEY_FILE=$RUNNER_TEMP/key.json" >> "$GITHUB_ENV"
-     
+
+      - name: Install Yandex Cloud CLI
+        run: |
+          curl -sSL https://storage.yandexcloud.net/yandexcloud-yc/install.sh | bash
+          echo "$HOME/yandex-cloud/bin" >> "$GITHUB_PATH"
+
+      - name: Authenticate YC CLI
+        run: |
+          yc config profile create github-actions || true
+          yc config set service-account-key "$YC_SERVICE_ACCOUNT_KEY_FILE"
+          yc config set cloud-id "${{ secrets.YC_CLOUD_ID }}"
+          yc config set folder-id "${{ secrets.YC_FOLDER_ID }}"
+
       - name: Terraform Init
         working-directory: terraform
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.YC_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.YC_SECRET_KEY }}
         run: terraform init -reconfigure
+
+      # If cloud resources exist but state is empty (partial previous apply), adopt them.
+      - name: Import existing resources into state (if any)
+        working-directory: terraform
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.YC_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.YC_SECRET_KEY }}
+        run: |
+          set +e
+
+          TF_VARS=(
+            -var="yc_cloud_id=${{ secrets.YC_CLOUD_ID }}"
+            -var="yc_folder_id=${{ secrets.YC_FOLDER_ID }}"
+            -var="db_password=${{ secrets.DB_PASSWORD }}"
+          )
+
+          import_if_missing() {
+            local address="$1"
+            local id="$2"
+            if [ -z "$id" ] || [ "$id" = "null" ]; then
+              return 0
+            fi
+            if terraform state show "$address" >/dev/null 2>&1; then
+              echo "Already in state: $address"
+              return 0
+            fi
+            echo "Importing $address <- $id"
+            terraform import "${TF_VARS[@]}" "$address" "$id"
+          }
+
+          SG_MAIN_ID=$(yc vpc security-group list --format json 2>/dev/null \
+            | jq -r '.[] | select(.name=="devops-k8s-main-sg") | .id' | head -n1)
+          SG_NODES_ID=$(yc vpc security-group list --format json 2>/dev/null \
+            | jq -r '.[] | select(.name=="devops-k8s-nodes-sg") | .id' | head -n1)
+          DB_ID=$(yc managed-postgresql cluster get devops-db-cluster --format json 2>/dev/null | jq -r '.id')
+          CLUSTER_ID=$(yc managed-kubernetes cluster get devops-k8s-cluster --format json 2>/dev/null | jq -r '.id')
+
+          import_if_missing "yandex_vpc_security_group.k8s_main" "$SG_MAIN_ID"
+          import_if_missing "yandex_vpc_security_group.k8s_nodes" "$SG_NODES_ID"
+          import_if_missing "yandex_mdb_postgresql_cluster.app_db" "$DB_ID"
+
+          if [ -n "$DB_ID" ] && [ "$DB_ID" != "null" ]; then
+            import_if_missing "yandex_mdb_postgresql_user.app_user" "${DB_ID}:user1"
+            import_if_missing "yandex_mdb_postgresql_database.app_db" "${DB_ID}:db1"
+          fi
+
+          import_if_missing "yandex_kubernetes_cluster.app" "$CLUSTER_ID"
+
+          if [ -n "$CLUSTER_ID" ] && [ "$CLUSTER_ID" != "null" ]; then
+            NG_ID=$(yc managed-kubernetes node-group list --cluster-id "$CLUSTER_ID" --format json 2>/dev/null \
+              | jq -r '.[] | select(.name=="devops-k8s-workers") | .id' | head -n1)
+            import_if_missing "yandex_kubernetes_node_group.workers" "$NG_ID"
+          fi
+
+          set -e
+          echo "Import step finished"
+          terraform state list || true
 
       - name: Terraform Apply
         working-directory: terraform
