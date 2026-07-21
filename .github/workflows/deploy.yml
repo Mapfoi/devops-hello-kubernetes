@@ -142,11 +142,14 @@ jobs:
             | jq -r '.[] | select(.name=="devops-k8s-main-sg") | .id' | head -n1)
           SG_NODES_ID=$(yc vpc security-group list --format json 2>/dev/null \
             | jq -r '.[] | select(.name=="devops-k8s-nodes-sg") | .id' | head -n1)
+          SG_PG_ID=$(yc vpc security-group list --format json 2>/dev/null \
+            | jq -r '.[] | select(.name=="devops-pgsql-sg") | .id' | head -n1)
           DB_ID=$(yc managed-postgresql cluster get devops-db-cluster --format json 2>/dev/null | jq -r '.id')
           CLUSTER_ID=$(yc managed-kubernetes cluster get devops-k8s-cluster --format json 2>/dev/null | jq -r '.id')
 
           import_if_missing "yandex_vpc_security_group.k8s_main" "$SG_MAIN_ID"
           import_if_missing "yandex_vpc_security_group.k8s_nodes" "$SG_NODES_ID"
+          import_if_missing "yandex_vpc_security_group.pgsql" "$SG_PG_ID"
           import_if_missing "yandex_mdb_postgresql_cluster.app_db" "$DB_ID"
 
           if [ -n "$DB_ID" ] && [ "$DB_ID" != "null" ]; then

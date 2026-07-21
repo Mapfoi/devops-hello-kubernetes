@@ -7,6 +7,10 @@ resource "yandex_mdb_postgresql_cluster" "app_db" {
   environment = "PRESTABLE"
   network_id  = data.yandex_vpc_network.default.id
 
+  security_group_ids = [
+    yandex_vpc_security_group.pgsql.id
+  ]
+
   config {
     version = "15"
 
