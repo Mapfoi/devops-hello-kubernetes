@@ -29,7 +29,7 @@ variable "db_password" {
 variable "k8s_version" {
   description = "Kubernetes version for Managed Kubernetes cluster"
   type        = string
-  default     = "1.29"
+  default     = "1.35"
 }
 
 variable "node_min_size" {
