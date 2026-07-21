@@ -33,17 +33,25 @@
 
 > Вставьте **весь JSON-файл** целиком как значение секрета.
 
-**Важно:** не редактируйте и не «красиво форматируйте» JSON вручную в UI.
-Если Terraform падает с `key unmarshal fail: invalid character '\n'`,
-пересоздайте секрет одной строкой:
+**Рекомендуемый способ (избегает поломки JSON в GitHub Secrets):**
 
 ```bash
-jq -c . key.json
-# скопируйте ВЫВОД целиком в GitHub Secret YC_SERVICE_ACCOUNT_JSON
+# Linux / macOS / Git Bash
+base64 -w0 key.json
+# скопируйте ОДНУ строку base64 в секрет YC_SERVICE_ACCOUNT_JSON
 ```
 
-Pipeline сам нормализует ключ через `scripts/write-yc-sa-key.py`
-(чинит литеральные переносы строк внутри `private_key`).
+```powershell
+# Windows PowerShell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("key.json"))
+```
+
+Pipeline принимает и raw JSON, и base64 (`scripts/write-yc-sa-key.py`).
+
+**Если Terraform падает с ошибками ключа** (`unmarshal`, `invalid Timestamp`, `invalid character '\n'`):
+
+1. Пересоздайте ключ: `yc iam key create --service-account-name <sa> --output key.json`
+2. Запишите секрет как **base64** (команды выше), не вставляйте pretty-printed JSON вручную.
 
 Необходимые роли сервисного аккаунта (минимум):
 
