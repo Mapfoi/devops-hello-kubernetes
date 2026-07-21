@@ -322,6 +322,8 @@ jobs:
             --wait \
             --timeout 5m
 
+          kubectl apply -f kubernetes/monitoring/grafana-ingress.yaml
+
       - name: Deployment summary
         run: |
           INGRESS_IP=$(kubectl -n ingress-nginx get svc ingress-nginx-controller \

@@ -1,17 +1,15 @@
 # Grafana Helm chart values
+# https://artifacthub.io/packages/helm/grafana/grafana
 adminPassword: admin
 
 service:
   type: ClusterIP
   port: 80
 
+# Ingress is managed separately (kubernetes/monitoring/grafana-ingress.yaml)
+# so we can expose /grafana on the LoadBalancer IP without a hostname.
 ingress:
-  enabled: true
-  ingressClassName: nginx
-  hosts:
-    - paths:
-        - path: /grafana
-          pathType: Prefix
+  enabled: false
 
 datasources:
   datasources.yaml:
