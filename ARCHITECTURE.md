@@ -1,6 +1,6 @@
 # Architecture: VM → Kubernetes Migration
 
-## 1. Старая архитектура (VM)
+## 1. Previous architecture (VM)
 
 ```text
 GitHub
@@ -11,31 +11,31 @@ GitHub Actions
    |
    +--> Terraform
           |
-          +--> Compute VM (Application)  — docker run через SSH
+          +--> Compute VM (Application)  — docker run over SSH
           |
           +--> Compute VM (Monitoring) — docker compose (Prometheus + Grafana)
           |
           +--> Managed PostgreSQL
 ```
 
-### Как это работало
+### How it worked
 
-1. CI собирал Docker-образ и пушил в Docker Hub.
-2. Terraform создавал две VM и Managed PostgreSQL.
-3. Через SSH на app VM выполнялся `docker pull` + `docker run`.
-4. Мониторинг копировался на вторую VM через `scp` и поднимался `docker compose`.
-5. Переменные БД писались в `/etc/environment` через cloud-init.
+1. CI built a Docker image and pushed it to Docker Hub.
+2. Terraform created two VMs and Managed PostgreSQL.
+3. Via SSH on the app VM, `docker pull` + `docker run` were executed.
+4. Monitoring was copied to the second VM via `scp` and started with `docker compose`.
+5. DB variables were written to `/etc/environment` via cloud-init.
 
-### Проблемы
+### Problems
 
-- Ручное управление контейнерами (`docker run` / SSH).
-- Нет автоматического восстановления и rolling update.
-- Нет горизонтального масштабирования приложения.
-- Две VM нужно обслуживать отдельно (патчи, Docker, SSH-ключи).
+- Manual container management (`docker run` / SSH).
+- No automatic recovery or rolling updates.
+- No horizontal scaling of the application.
+- Two VMs had to be maintained separately (patches, Docker, SSH keys).
 
 ---
 
-## 2. Новая архитектура (Kubernetes)
+## 2. New architecture (Kubernetes)
 
 ```text
 GitHub
@@ -56,33 +56,33 @@ GitHub Actions
           |         +--> HorizontalPodAutoscaler
           |         +--> Monitoring (Prometheus Operator + Grafana)
           |
-          +--> Managed PostgreSQL  (вне кластера)
+          +--> Managed PostgreSQL  (outside the cluster)
                     ^
                     |
               Kubernetes Pods (env from Secret)
 ```
 
-### Назначение компонентов
+### Component roles
 
-| Компонент | Назначение |
-|-----------|------------|
-| **Managed Kubernetes** | Оркестрация контейнеров, self-healing, rolling updates |
-| **hello-k8s-sa** | Существующий SA (IAM вручную); Terraform только читает его через data source |
-| **Node Group** | Worker nodes с autoscaling `min=2`, `max=5` |
-| **Deployment** | Желаемое состояние приложения (≥ 2 replicas) |
-| **Pod** | Экземпляр контейнера Flask + gunicorn |
-| **Service (ClusterIP)** | Стабильный внутренний VIP для Pod'ов |
-| **Ingress + NLB** | Внешний HTTP-доступ через Load Balancer |
-| **HPA** | Автомасштабирование Pod'ов по CPU/Memory |
-| **Secret** | `DB_*` credentials для подключения к PostgreSQL |
-| **ConfigMap** | Несекретная конфигурация приложения |
-| **Prometheus Operator** | Сбор метрик с `/metrics` |
-| **Grafana** | Дашборды и визуализация |
-| **Managed PostgreSQL** | Внешнее хранилище данных (не в кластере) |
+| Component | Purpose |
+|-----------|---------|
+| **Managed Kubernetes** | Container orchestration, self-healing, rolling updates |
+| **hello-k8s-sa** | Existing SA (IAM managed manually); Terraform only reads it via data source |
+| **Node Group** | Worker nodes with autoscaling `min=2`, `max=5` |
+| **Deployment** | Desired application state (≥ 2 replicas) |
+| **Pod** | Flask + gunicorn container instance |
+| **Service (ClusterIP)** | Stable internal VIP for Pods |
+| **Ingress + NLB** | External HTTP access via Load Balancer |
+| **HPA** | Pod autoscaling based on CPU/Memory |
+| **Secret** | `DB_*` credentials for PostgreSQL |
+| **ConfigMap** | Non-secret application configuration |
+| **Prometheus Operator** | Metrics scraping from `/metrics` |
+| **Grafana** | Dashboards and visualization |
+| **Managed PostgreSQL** | External data store (not in the cluster) |
 
 ---
 
-## 3. Поток CI/CD
+## 3. CI/CD flow
 
 ```text
 git push (main)
@@ -109,21 +109,21 @@ git push (main)
    Application + Monitoring available
 ```
 
-**Больше нет:** SSH, `docker run`, `scp`, cloud-init с Docker.
+**No longer used:** SSH, `docker run`, `scp`, cloud-init with Docker.
 
 ---
 
-## 4. Процесс деплоя приложения
+## 4. Application deployment process
 
-1. Новый образ публикуется в Docker Hub с тегом commit SHA.
-2. CI подставляет образ в `deployment.yaml` и делает `kubectl apply`.
-3. Deployment запускает Rolling Update:
-   - `maxUnavailable: 0`, `maxSurge: 1` — без даунтайма.
-4. Новые Pod'ы проходят **readinessProbe** (`GET /health`).
-5. Service переключает трафик на Ready Pod'ы.
-6. Старые Pod'ы завершаются после drain.
+1. A new image is published to Docker Hub tagged with the commit SHA.
+2. CI substitutes the image in `deployment.yaml` and runs `kubectl apply`.
+3. Deployment starts a Rolling Update:
+   - `maxUnavailable: 0`, `maxSurge: 1` — zero downtime.
+4. New Pods pass the **readinessProbe** (`GET /health`).
+5. Service switches traffic to Ready Pods.
+6. Old Pods terminate after drain.
 
-Проверка:
+Verification:
 
 ```bash
 kubectl -n devops-app get pods
@@ -132,7 +132,7 @@ kubectl -n devops-app rollout status deployment/app
 
 ---
 
-## 5. Подключение к PostgreSQL
+## 5. PostgreSQL connectivity
 
 ```text
 Managed PostgreSQL (Yandex MDB)
@@ -146,11 +146,11 @@ Managed PostgreSQL (Yandex MDB)
  Flask container (DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD)
 ```
 
-PostgreSQL **не** переносится в Kubernetes — остаётся Managed-сервисом Yandex Cloud.
+PostgreSQL is **not** moved into Kubernetes — it remains a Managed service in Yandex Cloud.
 
 ---
 
-## 6. Структура репозитория
+## 6. Repository structure
 
 ```text
 .
@@ -162,11 +162,11 @@ PostgreSQL **не** переносится в Kubernetes — остаётся Ma
 │   ├── variables.tf
 │   ├── outputs.tf
 │   ├── backend.tf
-│   ├── sa.tf              # data source: existing hello-k8s-sa (IAM вручную)
+│   ├── sa.tf              # data source: existing hello-k8s-sa (IAM managed manually)
 │   ├── cluster.tf
 │   ├── node_group.tf
 │   └── database.tf
-├── kubernetes/            # Manifests приложения
+├── kubernetes/            # Application manifests
 │   ├── namespace.yaml
 │   ├── deployment.yaml
 │   ├── service.yaml
@@ -183,20 +183,20 @@ PostgreSQL **не** переносится в Kubernetes — остаётся Ma
 
 ---
 
-## 7. Масштабирование
+## 7. Scaling
 
-| Уровень | Механизм | Параметры |
-|---------|----------|-----------|
+| Level | Mechanism | Parameters |
+|-------|-----------|------------|
 | Pods | HPA | min 2, max 10 (CPU 70% / Memory 80%) |
 | Nodes | Node Group autoscaling | min 2, max 5 |
 
 ---
 
-## 8. Управление окружением
+## 8. Environment management
 
-| Workflow | Действие |
-|----------|----------|
+| Workflow | Action |
+|----------|--------|
 | `deploy.yml` | Build → Terraform → kubectl / Helm deploy |
-| `stop.yml` | Останавливает Managed K8s (+ PostgreSQL) |
-| `start.yml` | Запускает кластер обратно |
-| `destroy.yml` | Удаляет Helm/LB ресурсы и `terraform destroy` |
+| `stop.yml` | Stops Managed K8s (+ PostgreSQL) |
+| `start.yml` | Starts the cluster again |
+| `destroy.yml` | Removes Helm/LB resources and runs `terraform destroy` |

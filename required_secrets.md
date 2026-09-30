@@ -1,11 +1,11 @@
 # Required GitHub Secrets
 
-Документация по секретам для GitHub Actions.
+Documentation of secrets for GitHub Actions.
 
-Источник по аутентификации Terraform:  
+Terraform authentication reference:  
 https://yandex.cloud/docs/terraform/authentication#service-account-key
 
-Источник по созданию ключа:  
+Authorized key creation reference:  
 https://yandex.cloud/docs/iam/operations/authentication/manage-authorized-keys#create-authorized-key
 
 ---
@@ -14,27 +14,27 @@ https://yandex.cloud/docs/iam/operations/authentication/manage-authorized-keys#c
 
 ### `YC_SERVICE_ACCOUNT_JSON`
 
-**Назначение:** содержимое файла авторизованного ключа сервисного аккаунта (`key.json`).
+**Purpose:** contents of the service account authorized key file (`key.json`).
 
-Terraform читает его как файл по пути из переменной окружения:
+Terraform reads it as a file from the path in the environment variable:
 
 ```bash
 export YC_SERVICE_ACCOUNT_KEY_FILE="<path_to_key.json>"
 ```
 
-([документация](https://yandex.cloud/docs/terraform/authentication#service-account-key))
+([documentation](https://yandex.cloud/docs/terraform/authentication#service-account-key))
 
-#### Как создать ключ (официально)
+#### How to create the key (official)
 
 ```bash
 yc iam key create \
-  --service-account-name <имя_СА> \
+  --service-account-name <SA_NAME> \
   -o key.json
 ```
 
-Либо в консоли: IAM → Сервисные аккаунты → Создать авторизованный ключ → **Скачать файл с ключами**.
+Or in the console: IAM → Service accounts → Create authorized key → **Download key file**.
 
-#### Формат файла (из документации YC)
+#### File format (from YC docs)
 
 ```json
 {
@@ -47,43 +47,43 @@ yc iam key create \
 }
 ```
 
-Важно:
+Important:
 
-- `public_key` и `private_key` — **одна строка JSON**, переносы внутри PEM заданы как `\n` (два символа), не как реальные Enter.
-- Файл должен быть валидным JSON «как после `yc iam key create -o key.json`».
+- `public_key` and `private_key` are a **single JSON string**; PEM line breaks are encoded as `\n` (two characters), not real Enter newlines.
+- The file must be valid JSON “as produced by `yc iam key create -o key.json`”.
 
-#### Что положить в GitHub Secret
+#### What to put in the GitHub Secret
 
-Содержимое файла `key.json` **целиком**, без изменений:
+The entire `key.json` file contents, unchanged:
 
-1. Откройте `key.json` в редакторе.
-2. Скопируйте всё.
-3. Settings → Secrets → `YC_SERVICE_ACCOUNT_JSON` → вставьте.
+1. Open `key.json` in an editor.
+2. Copy everything.
+3. Settings → Secrets → `YC_SERVICE_ACCOUNT_JSON` → paste.
 
-Проверка локально:
+Local validation:
 
 ```bash
 jq empty key.json && echo OK
 ```
 
-#### Сервисный аккаунт `hello-k8s-sa` (вручную, не через Terraform)
+#### Service account `hello-k8s-sa` (manual, not via Terraform)
 
-Terraform **не** создаёт IAM и **не** назначает роли.  
-Используется уже существующий SA (по умолчанию `hello-k8s-sa`).
+Terraform does **not** create IAM and does **not** assign roles.  
+An already existing SA is used (default: `hello-k8s-sa`).
 
-Роли на каталог (выдать один раз в консоли / CLI):
+Folder roles (assign once in the console / CLI):
 
-| Роль | Зачем |
-|------|--------|
-| `editor` (или шире) | Terraform create/update ресурсов |
+| Role | Why |
+|------|-----|
+| `editor` (or broader) | Terraform create/update of resources |
 | `k8s.clusters.agent` | Managed Kubernetes master |
-| `vpc.publicAdmin` | Публичные IP / сеть кластера |
-| `load-balancer.admin` | NLB для Ingress |
-| `alb.editor` | ALB (если понадобится) |
-| `certificate-manager.certificates.downloader` | Сертификаты |
-| `container-registry.images.puller` | Pull образов на nodes |
-| `viewer` | Node group SA обязанности |
-| `storage.editor` | Terraform S3 state (если тот же SA) |
+| `vpc.publicAdmin` | Public IPs / cluster networking |
+| `load-balancer.admin` | NLB for Ingress |
+| `alb.editor` | ALB (if needed) |
+| `certificate-manager.certificates.downloader` | Certificates |
+| `container-registry.images.puller` | Image pulls on nodes |
+| `viewer` | Node group SA duties |
+| `storage.editor` | Terraform S3 state (if same SA) |
 
 ```bash
 FOLDER_ID=$(yc config get folder-id)
@@ -106,7 +106,7 @@ done
 yc config get cloud-id
 ```
 
-Пример: `b1gxxxxxxxxxxxxxxxxx`
+Example: `b1gxxxxxxxxxxxxxxxxx`
 
 ---
 
@@ -116,23 +116,23 @@ yc config get cloud-id
 yc config get folder-id
 ```
 
-Пример: `b1gxxxxxxxxxxxxxxxxx`
+Example: `b1gxxxxxxxxxxxxxxxxx`
 
 ---
 
 ### `YC_ACCESS_KEY` / `YC_SECRET_KEY`
 
-Ключи для Object Storage (S3 backend Terraform state):
+Keys for Object Storage (S3 backend for Terraform state):
 
 ```bash
-yc iam access-key create --service-account-name <имя_СА>
+yc iam access-key create --service-account-name <SA_NAME>
 ```
 
 ---
 
-### `YC_KUBECONFIG` (опционально)
+### `YC_KUBECONFIG` (optional)
 
-Если не задан — pipeline получает credentials через:
+If not set, the pipeline obtains credentials via:
 
 ```bash
 yc managed-kubernetes cluster get-credentials <cluster_id> --external --force
@@ -152,13 +152,13 @@ Docker Hub → Account Settings → Security → Access Tokens.
 
 ### `DB_PASSWORD`
 
-Пароль пользователя Managed PostgreSQL.
+Password for the Managed PostgreSQL user.
 
 ---
 
-## Больше не нужны
+## No longer needed
 
-| Секрет | Почему |
-|--------|--------|
-| `SSH_PRIVATE_KEY` | Нет SSH / VM |
-| `SSH_PUBLIC_KEY` | Нет cloud-init на VM |
+| Secret | Why |
+|--------|-----|
+| `SSH_PRIVATE_KEY` | No SSH / VM |
+| `SSH_PUBLIC_KEY` | No cloud-init on VM |
