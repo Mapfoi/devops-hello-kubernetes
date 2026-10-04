@@ -316,6 +316,12 @@ jobs:
           helm repo add grafana https://grafana.github.io/helm-charts
           helm repo update
 
+          if ! kubectl -n "${{ env.MONITORING_NAMESPACE }}" get secret grafana-admin >/dev/null 2>&1; then
+            kubectl -n "${{ env.MONITORING_NAMESPACE }}" create secret generic grafana-admin \
+              --from-literal=admin-user=admin \
+              --from-literal=admin-password="$(openssl rand -base64 24)"
+          fi
+
           helm upgrade --install grafana grafana/grafana \
             --namespace "${{ env.MONITORING_NAMESPACE }}" \
             --values helm/grafana/values.yaml \
@@ -339,7 +345,10 @@ jobs:
           echo ""
           if [ -n "$INGRESS_IP" ]; then
             echo "Application:  http://${INGRESS_IP}/"
-            echo "Grafana:      http://${INGRESS_IP}/grafana  (admin / admin)"
+            echo "Grafana:      http://${INGRESS_IP}/grafana"
+            echo "Grafana password:"
+            echo "  kubectl -n ${{ env.MONITORING_NAMESPACE }} get secret grafana-admin \\"
+            echo "    -o jsonpath='{.data.admin-password}' | base64 -d"
           else
             echo "Ingress IP is provisioning. Check later:"
             echo "  kubectl -n ingress-nginx get svc ingress-nginx-controller"
