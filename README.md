@@ -37,7 +37,8 @@ Pipeline will:
 
 - Flask + gunicorn on port `8080`
 - Metrics: `GET /metrics`
-- Health: `GET /health`
+- Liveness: `GET /health` (process is up)
+- Readiness: `GET /ready` (PostgreSQL is reachable)
 - Visits counter stored in Managed PostgreSQL
 
 ## Useful commands

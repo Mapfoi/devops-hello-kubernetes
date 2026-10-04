@@ -119,7 +119,7 @@ git push (main)
 2. CI substitutes the image in `deployment.yaml` and runs `kubectl apply`.
 3. Deployment starts a Rolling Update:
    - `maxUnavailable: 0`, `maxSurge: 1` — zero downtime.
-4. New Pods pass the **readinessProbe** (`GET /health`).
+4. New Pods pass the **readinessProbe** (`GET /ready`), which checks PostgreSQL. Liveness uses `GET /health` and does not depend on the database.
 5. Service switches traffic to Ready Pods.
 6. Old Pods terminate after drain.
 

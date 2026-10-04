@@ -79,7 +79,22 @@ def hello_world():
 
 @app.route('/health')
 def health():
+    """Liveness: process is up. Do not check dependencies here."""
     return jsonify({"status": "healthy"})
+
+
+@app.route('/ready')
+def ready():
+    """Readiness: PostgreSQL is reachable. Failed checks take the Pod out of Service."""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT 1")
+        cur.close()
+        conn.close()
+        return jsonify({"status": "ready"})
+    except OperationalError:
+        return jsonify({"status": "not ready"}), 503
 
 
 if __name__ == '__main__':
