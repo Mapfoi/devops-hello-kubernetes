@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: k8s-deploy
+  group: k8s-infra
   cancel-in-progress: false
 
 env:
