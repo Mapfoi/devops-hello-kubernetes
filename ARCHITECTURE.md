@@ -92,9 +92,10 @@ git push (main)
         |
         v
    [infrastructure]  terraform apply
-        |                 - IAM / Security Groups
+        |                 - Security Groups
         |                 - Managed Kubernetes + Node Group
         |                 - Managed PostgreSQL
+        |                 (IAM is assigned manually, not by Terraform)
         v
    [deploy]
         |-- yc get-credentials / kubeconfig
@@ -156,7 +157,7 @@ PostgreSQL is **not** moved into Kubernetes — it remains a Managed service in 
 .
 ├── .github/workflows/     # CI/CD (deploy, destroy, start, stop)
 ├── app/                   # Flask + Dockerfile
-├── terraform/             # Managed K8s + PostgreSQL + IAM
+├── terraform/             # Managed K8s + PostgreSQL (IAM is manual)
 │   ├── versions.tf
 │   ├── provider.tf
 │   ├── variables.tf

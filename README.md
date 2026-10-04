@@ -1,6 +1,8 @@
 # devops-hello-kubernetes
 
-Production-style DevOps project: containerized Flask app on **Yandex Managed Kubernetes** with Terraform, GitHub Actions, Managed PostgreSQL, Prometheus and Grafana.
+Educational / portfolio lab: containerized Flask app on **Yandex Managed Kubernetes** with Terraform, GitHub Actions, Managed PostgreSQL, Prometheus and Grafana.
+
+This is not a production deployment. The lab uses HTTP-only Ingress, a single-zone cluster, and IAM that is assigned manually outside Terraform.
 
 ## Architecture
 

@@ -79,19 +79,17 @@ Folder roles (assign once in the console / CLI):
 | `k8s.clusters.agent` | Managed Kubernetes master |
 | `vpc.publicAdmin` | Public IPs / cluster networking |
 | `load-balancer.admin` | NLB for Ingress |
-| `alb.editor` | ALB (if needed) |
-| `certificate-manager.certificates.downloader` | Certificates |
-| `container-registry.images.puller` | Image pulls on nodes |
 | `viewer` | Node group SA duties |
 | `storage.editor` | Terraform S3 state (if same SA) |
+
+Images are pulled from Docker Hub, not Yandex Container Registry. This lab does not provision TLS certificates.
 
 ```bash
 FOLDER_ID=$(yc config get folder-id)
 SA_ID=$(yc iam service-account get hello-k8s-sa --format json | jq -r .id)
 
 for ROLE in editor k8s.clusters.agent vpc.publicAdmin load-balancer.admin \
-            alb.editor certificate-manager.certificates.downloader \
-            container-registry.images.puller viewer storage.editor; do
+            viewer storage.editor; do
   yc resource-manager folder add-access-binding "$FOLDER_ID" \
     --role "$ROLE" \
     --subject "serviceAccount:$SA_ID"
