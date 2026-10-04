@@ -3,6 +3,10 @@ name: Start Environment
 on:
   workflow_dispatch:
 
+concurrency:
+  group: k8s-infra
+  cancel-in-progress: false
+
 jobs:
   start:
     runs-on: ubuntu-latest
