@@ -6,7 +6,8 @@ metadata:
   labels:
     app: devops-hello
 spec:
-  replicas: 2
+  # Replica count is owned by HPA (min 2). Setting replicas here would
+  # reset scaling on every kubectl apply.
   selector:
     matchLabels:
       app: devops-hello
