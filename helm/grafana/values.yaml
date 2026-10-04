@@ -1,6 +1,10 @@
 # Grafana Helm chart values
 # https://artifacthub.io/packages/helm/grafana/grafana
-adminPassword: admin
+# Admin password is not stored in git. CI creates Secret grafana-admin.
+admin:
+  existingSecret: grafana-admin
+  userKey: admin-user
+  passwordKey: admin-password
 
 service:
   type: ClusterIP
